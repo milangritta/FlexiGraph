@@ -3,7 +3,8 @@ import codecs
 import cPickle
 from collections import Counter
 import matplotlib.pyplot as plt
-import spacy
+import spacy, os
+from lxml import etree
 import numpy as np
 import sqlite3
 from geopy.distance import great_circle
@@ -12,7 +13,7 @@ from matplotlib import pyplot, colors
 
 # -------- GLOBAL CONSTANTS AND VARIABLES -------- #
 BATCH_SIZE = 64
-CONTEXT_LENGTH = 1000
+CONTEXT_LENGTH = 2000
 UNKNOWN = u"<unknown>"
 EMBEDDING_DIMENSION = 50
 ENCODING_MAP_1x1 = cPickle.load(open(u"data/1x1_encode_map.pkl"))      # We need these maps
@@ -48,12 +49,11 @@ def pad_list(size, a_list, from_left, padding):
     :param padding: whatever you want to use for padding, example "0"
     :return: the padded list
     """
-    while len(a_list) < size:
-        if from_left:
-            a_list = [padding] + a_list
-        else:
-            a_list += [padding]
-    return a_list
+    fill = [padding] * (size - len(a_list))
+    if from_left:
+        return fill + a_list
+    else:
+        return a_list + fill
 
 
 def coord_to_index(coordinates, polygon_size):
@@ -104,7 +104,7 @@ def get_coordinates(con, loc_name):
     result = con.execute(u"SELECT METADATA FROM GEO WHERE NAME = ?", (loc_name.lower(),)).fetchone()
     if result:
         result = eval(result[0])  # Do not remove the sorting, the function below assumes sorted results!
-        return sorted(result, key=lambda (a, b, c, d): c, reverse=True)
+        return sorted(result, key=lambda (a, b, c): c, reverse=True)
     else:
         return []
 
@@ -192,9 +192,9 @@ def populate_sql():
 
     conn = sqlite3.connect(u'../data/new.geonames.db')
     c = conn.cursor()
-    # c.execute("CREATE TABLE GEO (NAME VARCHAR(100) PRIMARY KEY NOT NULL, METADATA VARCHAR(5000) NOT NULL);")
-    c.execute(u"DELETE FROM GEO")  # alternatively, delete the database file.
-    conn.commit()
+    c.execute(u"CREATE TABLE GEO (NAME VARCHAR(100) PRIMARY KEY NOT NULL, METADATA VARCHAR(5000) NOT NULL);")
+    # c.execute(u"DELETE FROM GEO")  # alternatively, delete the database file.
+    # conn.commit()
 
     for gn in geo_names:
         c.execute(u"INSERT INTO GEO VALUES (?, ?)", (gn, str(list(geo_names[gn]))))
@@ -217,7 +217,7 @@ def get_population(class_code, feat_code, p_map, pop):
     return pop
 
 
-def generate_training_data():
+def generate_training_data(file_name):
     """
     Prepare Wikipedia training data. Please download the required files from GitHub.
     Files: geonames.db and geowiki.txt both inside the data folder.
@@ -225,73 +225,51 @@ def generate_training_data():
     """
     conn = sqlite3.connect(u'../data/new.geonames.db')
     c = conn.cursor()
+    if not os.path.exists("../data/"):
+        os.mkdir("../data/")
     nlp = spacy.load(u'en')
     padding = nlp(u"0")[0]
-    inp = codecs.open(u"../data/geowiki.txt", u"r", encoding=u"utf-8")
-    o = codecs.open(u"../data/train_wiki.txt", u"w", encoding=u"utf-8")
-    lat, lon = u"", u""
-    string = u""
-    skipped = 0
+    tree = etree.parse(u'WikiGeolocate/' + file_name + u".xml", etree.XMLParser(encoding='utf-8'))
+    o = codecs.open(u"../data/" + file_name + ".txt", u"w", encoding=u"utf-8")
 
-    for line in inp:
-        if len(line.strip()) == 0:
-            continue
-        limit = 0
-        if line.startswith(u"NEW ARTICLE::"):
-            if len(string.strip()) > 0:
-                locations = []
-                doc = nlp(string)
-                for start in range(0, len(doc), CONTEXT_LENGTH):
-                    inp = pad_list(CONTEXT_LENGTH, [d for d in doc[start:start + CONTEXT_LENGTH]], False, padding)
-                    out = []
-                    location = u""
-                    for (out_list, inp_list) in [(out, inp)]:
-                        for index, item in enumerate(inp_list):
-                            if item.ent_type_ in [u"GPE", u"FACILITY", u"LOC", u"FAC"]:
-                                if item.ent_iob_ == u"B" and item.text.lower() == u"the":
-                                    out_list.append(item.text.lower())
-                                else:
-                                    location += item.text + u" "
-                                    out_list.append(item.text.lower())
-                            elif item.ent_type_ in [u"PERSON", u"DATE", u"TIME", u"PERCENT", u"MONEY",
-                                                    u"QUANTITY", u"CARDINAL", u"ORDINAL"]:
-                                out_list.append(u'0')
-                            elif item.is_punct:
-                                out_list.append(u'0')
-                            elif item.is_digit or item.like_num:
-                                out_list.append(u'0')
-                            elif item.like_email:
-                                out_list.append(u'0')
-                            elif item.like_url:
-                                out_list.append(u'0')
-                            elif item.is_stop:
-                                out_list.append(u'0')
-                            else:
-                                out_list.append(item.lemma_)
-                            if location.strip() != u"" and (item.ent_type == 0 or index == len(inp_list) - 1):
-                                location = location.strip()
-                                coords = get_coordinates(c, location)
-                                if len(coords) > 0:
-                                    locations.append(coords)
-                                else:
-                                    offset = 1 if index == len(inp_list) - 1 else 0
-                                    for i in range(index - len(location.split()), index):
-                                        out_list[i + offset] = inp_list[i + offset].lemma_ if inp_list[i + offset].is_alpha else u'0'
-                                location = u""
-                    entities = merge_lists(locations)
-                    locations = []
-                    o.write(lat + u"\t" + lon + u"\t" + str(out))
-                    o.write(u"\t" + str(entities) + u"\n")
-                    limit += 1
-                    if limit > 29:
-                        break
-            line = line.strip().split("\t")
-            lat = line[2]
-            lon = line[3]
-            string = ""
-            print(u"Processed", limit, u"Skipped:", skipped)
-        else:
-            string += line
+    for page in tree.getroot():
+        lat = page.find("./latitude").text
+        lon = page.find("./longitude").text
+        text = unicode(page.text)
+        locations, out = [], []
+        doc = nlp(text)
+        location = u""
+        for index, item in enumerate(doc[:CONTEXT_LENGTH]):
+            if item.ent_type_ in [u"GPE", u"FACILITY", u"LOC", u"FAC"]:
+                if item.ent_iob_ == u"B" and item.text.lower() == u"the":
+                    out.append(item.text.lower())
+                else:
+                    location += item.text + u" "
+                    out.append(item.text.lower())
+            elif item.ent_type_ in [u"PERSON", u"DATE", u"TIME", u"PERCENT", u"MONEY",
+                                    u"QUANTITY", u"CARDINAL", u"ORDINAL"]:
+                out.append(padding)
+            elif item.is_punct:
+                out.append(padding)
+            elif item.is_digit or item.like_num:
+                out.append(padding)
+            elif item.like_email:
+                out.append(padding)
+            elif item.like_url:
+                out.append(padding)
+            elif item.is_stop:
+                out.append(padding)
+            else:
+                out.append(item.lemma_)
+            if location.strip() != u"" and item.ent_type == 0:
+                location = location.strip()
+                coords = get_coordinates(c, location)
+                if len(coords) > 0:
+                    locations.append(coords)
+                location = u""
+        entities = merge_lists(locations)
+        o.write(lat + u"\t" + lon + u"\t" + str(out))
+        o.write(u"\t" + str(entities) + u"\n")
     o.close()
 
 
@@ -315,21 +293,18 @@ def visualise_2D_grid(x, title, log=False):
 
 def generate_vocabulary(path, min_words, min_entities):
     """
-    Prepare the vocabulary for training/testing. This function is to be called on generated data only, not plain text.
+    Prepare the vocabulary for training/testing.
     :param path: to the file from which to build
     :param min_words: occurrence for inclusion in the vocabulary
     :param min_entities: occurrence for inclusion in the vocabulary
     """
-    vocab_words, vocab_locations = {UNKNOWN, u'0'}, {UNKNOWN, u'0'}
-    words, locations = [], []
+    vocab_words = {UNKNOWN, u'0'}
+    words = []
     for f in [path]:  # You can also build the vocabulary from several files, just add to the list.
         training_file = codecs.open(f, u"r", encoding=u"utf-8")
         for line in training_file:
             line = line.strip().split("\t")
-            words.extend([w for w in eval(line[2]) if u"**LOC**" not in w])  # NEAR WORDS
-            words.extend([w for w in eval(line[3]) if u"**LOC**" not in w])  # FAR WORDS
-            locations.extend([w for w in eval(line[2]) if u"**LOC**" in w])  # NEAR ENTITIES
-            locations.extend([w for w in eval(line[3]) if u"**LOC**" in w])  # FAR ENTITIES
+            words.extend(eval(line[2]))
 
     words = Counter(words)
     for word in words:
@@ -337,14 +312,7 @@ def generate_vocabulary(path, min_words, min_entities):
             vocab_words.add(word)
     print(u"Words saved:", len(vocab_words))
 
-    locations = Counter(locations)
-    for location in locations:
-        if locations[location] > min_entities:
-            vocab_locations.add(location.replace(u"**LOC**", u""))
-    print(u"Locations saved:", len(vocab_locations))
-
-    vocabulary = vocab_words.union(vocab_locations)
-    word_to_index = dict([(w, i) for i, w in enumerate(vocabulary)])
+    word_to_index = dict([(w, i) for i, w in enumerate(vocab_words)])
     cPickle.dump(word_to_index, open(u"data/w2i.pkl", "w"))
 
 
@@ -364,7 +332,7 @@ def generate_arrays_from_file(path, w2i, train=True):
             counter += 1
             line = line.strip().split("\t")
             labels.append(construct_loc2vec([(float(line[0]), float(line[1]), 0)], 2, ENCODING_MAP_2x2, OUTLIERS_MAP_2x2))
-            words.append(eval(line[2]))
+            words.append(pad_list(CONTEXT_LENGTH, eval(line[2]), from_left=False, padding=u'0'))
 
             # loc2vec.append(construct_loc2vec(sorted(eval(line[4]) + eval(line[6]) + eval(line[7]),
             #                key=lambda (a, b, c, d): c, reverse=True), 1, ENCODING_MAP_1x1, OUTLIERS_MAP_1x1))
@@ -482,7 +450,7 @@ def oracle(path):
 # --------------------------------------------- INVOKE FUNCTIONS ---------------------------------------------------
 
 # print get_coordinates(sqlite3.connect('../data/new.geonames.db').cursor(), u"dublin")
-# generate_training_data()
+# generate_training_data("WikiGeolocateShortDev")
 # generate_evaluation_data(corpus="lgl", file_name="")
 # generate_vocabulary(path=u"../data/train_wiki.txt", min_words=9, min_entities=1)
 # shrink_loc2vec(2)

@@ -12,7 +12,7 @@ from preprocessing import generate_arrays_from_file, ENCODING_MAP_2x2, ENCODING_
 from subprocess import check_output
 
 print(u"Dimension:", EMBEDDING_DIMENSION)
-print(u"Input length:", CONTEXT_LENGTH)
+print(u"Context length:", CONTEXT_LENGTH)
 word_to_index = cPickle.load(open(u"data/w2i.pkl"))
 print(u"Vocabulary Size:", len(word_to_index))
 
@@ -75,7 +75,7 @@ print(u'Finished building model...')
 #  --------------------------------------------------------------------------------------------------------------------
 checkpoint = ModelCheckpoint(filepath=u"../data/weights.{epoch:02d}-{acc:.2f}.hdf5", verbose=0)
 early_stop = EarlyStopping(monitor=u'acc', patience=5)
-file_name = u"../data/train_wiki.txt"
+file_name = u"../data/WikiGeolocateLongTrain.txt"
 model.fit_generator(generate_arrays_from_file(file_name, word_to_index),
                     steps_per_epoch=int(check_output(["wc", file_name]).split()[0]) / BATCH_SIZE,
                     epochs=250, callbacks=[checkpoint, early_stop])
