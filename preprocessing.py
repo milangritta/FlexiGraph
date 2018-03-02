@@ -366,7 +366,7 @@ def generate_arrays_from_file(path, w2i, train=True):
                 yield ([np.asarray(words), np.asarray(words), np.asarray(words), np.asarray(loc2vec)])
 
 
-def generate_strings_from_file(path):
+def generate_labels_from_file(path):
     """
     Generator of labels, location names and context. Used for training and testing.
     :param path: to the training file (see training data generation functions)
@@ -375,8 +375,7 @@ def generate_strings_from_file(path):
     while True:
         for line in codecs.open(path, "r", encoding="utf-8"):
             line = line.strip().split("\t")
-            context = u" ".join(eval(line[2])) + u"*E*" + u" ".join(eval(line[5])) + u"*E*" + u" ".join(eval(line[3]))
-            yield ((float(line[0]), float(line[1])), u" ".join(eval(line[5])).strip(), context)
+            yield ((float(line[0]), float(line[1])))
 
 
 def generate_arrays_from_file_loc2vec(path, train=True, looping=True):
