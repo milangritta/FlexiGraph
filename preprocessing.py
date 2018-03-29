@@ -110,6 +110,20 @@ def get_coordinates(con, loc_name):
         return []
 
 
+def get_wiki_coordinates(con, loc_name):
+    """
+    Access the database to retrieve Wikipedia coordinates.
+    :param con: sqlite3 database cursor i.e. DB connection
+    :param loc_name: name of the place
+    :return: a list of tuples [(latitude, longitude, population, feature_code), ...]
+    """
+    result = con.execute(u"SELECT METADATA FROM WIKI WHERE NAME = ?", (loc_name.lower(),)).fetchone()
+    if result:
+        return eval(result[0])
+    else:
+        return []
+
+
 def construct_map2vec(a_list, polygon_size, mapping, outliers):
     """
     Build the map2vec vector representation from a list of location data.
@@ -385,7 +399,7 @@ def generate_evaluation_data(corpus, file_name):
                                     out_list.append(item.lemma_)
                                 if location.strip() != u"" and (item.ent_type == 0 or index == len(in_list) - 1):
                                     location = location.strip()
-                                    coords = get_coordinates(c, location)
+                                    coords = get_coordinates(c, location)  # + Wikipedia Locations
                                     if len(coords) > 0 and location != u" ".join(target):
                                         if is_near:
                                             locations_near.append(coords)
@@ -695,7 +709,8 @@ def prepare_geocorpora():
 
 # --------------------------------------------- INVOKE FUNCTIONS ---------------------------------------------------
 # prepare_geocorpora()
-# print get_coordinates(sqlite3.connect('../data/geonames.db').cursor(), u"dublin")
+# print get_coordinates(sqlite3.connect('../data/geonames.db').cursor(), u"London")
+# print get_wiki_coordinates(sqlite3.connect('../data/geonames.db').cursor(), u"Oslo")
 # generate_training_data()
 # generate_evaluation_data(corpus="geovirus", file_name="")
 # generate_vocabulary(path=u"../data/train_wiki.txt", min_words=9, min_entities=1)
@@ -772,13 +787,35 @@ def prepare_geocorpora():
 # -------------------------------
 
 
-# gold = {}
-# out = codecs.open("data/geovirus.txt", mode="w", encoding="utf-8")
-# common = set([2049, 2054, 2057, 2058, 2060, 13, 2065, 2067, 2068, 22, 27, 33, 34, 35, 2089, 42, 44, 2093, 46, 2096, 2097, 51, 52, 53, 54, 55, 56, 2106, 59, 2108, 2109, 67, 2117, 2119, 75, 2126, 79, 80, 2129, 2130, 83, 85, 86, 2136, 2137, 90, 91, 92, 2142, 99, 2148, 2150, 2151, 106, 107, 108, 110, 111, 113, 114, 2163, 116, 117, 2166, 119, 123, 126, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 143, 146, 147, 153, 154, 155, 160, 161, 162, 165, 166, 171, 176, 179, 180, 182, 183, 185, 186, 187, 188, 189, 191, 192, 195, 198, 2081, 201, 202, 207, 208, 211, 213, 214, 215, 222, 224, 225, 227, 230, 231, 232, 236, 242, 243, 244, 245, 246, 252, 2090, 254, 257, 262, 263, 264, 265, 268, 270, 272, 273, 276, 277, 278, 282, 283, 284, 285, 287, 288, 289, 291, 293, 294, 295, 296, 300, 301, 302, 304, 305, 311, 315, 2101, 328, 329, 330, 332, 333, 334, 337, 342, 344, 345, 346, 347, 351, 352, 353, 354, 357, 359, 361, 362, 363, 364, 365, 368, 369, 371, 373, 375, 379, 380, 383, 385, 386, 387, 388, 391, 392, 393, 394, 395, 396, 397, 399, 400, 401, 2115, 405, 2133, 2155, 2158, 2159, 2162, 2164, 2165, 1153, 1154, 1155, 1156, 1157, 1158, 1159, 1160, 1161, 1162, 1163, 1164, 1165, 1166, 1167, 1168, 1169, 1170, 1171, 1172, 1173, 1174, 1175, 1176, 1178, 1179, 1180, 1182, 1183, 1184, 1186, 1188, 1189, 1190, 1191, 1196, 1197, 1203, 1209, 1211, 1213, 1215, 1217, 1219, 1225, 1226, 1227, 1228, 1229, 1230, 1231, 1232, 1233, 1234, 1235, 1237, 1238, 1239, 1241, 1242, 1243, 1246, 1247, 1249, 1256, 1257, 1259, 1260, 1262, 1264, 1267, 1270, 1272, 1273, 1278, 1279, 1280, 1281, 1282, 1283, 1298, 1303, 1304, 1307, 1308, 1309, 1333, 1335, 1338, 1347, 1348, 1354, 1355, 1358, 1360, 1366, 1367, 1374, 1384, 1386, 1387, 1396, 1397, 1398, 1401, 1402, 1404, 1408, 1409, 1410, 1411, 1418, 1419, 1420, 1421, 1422, 1423, 1432, 1433, 1435, 1436, 1437, 1441, 1443, 1449, 2094, 1455, 1456, 1457, 1458, 1461, 1462, 1464, 1466, 1467, 1468, 1469, 1471, 1473, 1474, 1480, 1481, 1482, 1483, 1486, 1487, 1490, 1502, 1506, 1511, 1514, 1515, 1519, 1520, 1522, 1523, 1524, 1526, 1527, 1531, 1533, 1534, 1538, 1540, 1541, 1542, 1543, 1544, 1545, 1546, 1554, 1556, 1557, 1558, 1559, 1565, 1566, 1568, 1569, 1576, 1581, 1582, 1583, 1584, 1586, 1587, 1588, 1589, 1591, 1592, 1593, 1594, 1595, 1597, 1598, 1599, 1600, 1601, 1602, 1603, 1604, 1605, 1608, 1610, 1611, 1612, 1615, 1616, 1623, 1627, 1630, 1632, 1633, 1635, 1636, 1637, 1642, 1643, 1644, 1650, 1652, 1660, 1661, 1662, 1663, 1665, 1667, 1668, 1670, 1671, 1673, 1678, 1683, 1685, 1686, 1690, 1691, 1693, 1697, 1698, 1699, 1700, 1701, 1702, 1705, 1707, 1711, 1716, 1717, 1722, 1723, 1725, 1731, 1734, 1735, 1737, 1738, 1739, 1741, 1742, 1743, 1744, 1745, 1748, 1753, 1755, 1759, 1761, 1766, 1767, 1770, 1773, 1775, 1776, 1785, 1788, 1789, 1791, 1793, 1794, 1795, 1796, 1797, 1798, 1799, 1801, 1802, 1804, 1805, 1806, 1807, 1808, 1809, 1810, 1813, 1815, 1816, 1817, 1819, 1820, 1822, 1823, 1825, 1826, 1829, 1832, 1833, 1836, 1838, 1839, 1842, 1844, 1849, 1854, 1855, 1856, 1873, 1882, 1883, 1884, 1885, 1902, 1903, 1904, 1905, 1906, 1907, 1909, 1919, 1923, 1924, 1925, 1926, 1927, 1928, 1929, 1930, 1934, 1937, 1938, 1939, 1941, 1943, 1945, 1947, 1949, 1954, 1956, 1958, 1960, 1962, 1963, 1965, 1966, 1967, 1974, 1978, 1979, 1980, 1981, 1982, 1985, 1990, 2000, 2002, 2005, 2006, 2008, 2009, 2011, 2012, 2014, 2022, 2027, 2029, 2030, 2031, 2032, 2037, 2040, 2042, 2045, 2047])
-# index = 0
-# for line in codecs.open("data/geovirus_gold.txt", encoding="utf-8"):
-#     for l in line.split("||")[:-1]:
-#         if index in common:
-#             out.write(l + u"||")
-#         index += 1
-#     out.write(u"\n")
+# ---------- POPULATE DATABASE WITH WIKIPEDIA NAMES ------
+# conn = sqlite3.connect(u'../data/geonames.db')
+# c = conn.cursor()
+# # c.execute("CREATE TABLE WIKI (NAME VARCHAR(150) PRIMARY KEY NOT NULL, METADATA VARCHAR(500) NOT NULL);")
+# c.execute(u"DELETE FROM WIKI")  # Delete the database contents.
+# conn.commit()
+# wiki_names = {}
+#
+# inp = codecs.open(u"../data/geowiki.txt", u"r", encoding=u"utf-8")
+# for line in inp:
+#     if len(line.strip()) == 0:
+#         continue
+#     if line.startswith(u"NEW ARTICLE::"):
+#         line = line.strip().split("\t")
+#         if u"(" in line[1]:
+#             line[1] = line[1].split(u"(")[0].strip()
+#         if line[1].strip().startswith(u"Geography of "):
+#             continue
+#         elif u"," in line[1]:
+#             line[1] = line[1].split(u",")[0].strip()
+#         if line[1].lower() in wiki_names:
+#             wiki_names[line[1].lower()].add((float(line[2]), float(line[3])))
+#         else:
+#             wiki_names[line[1].lower()] = {(float(line[2]), float(line[3]))}
+#
+# for wn in wiki_names:
+#     c.execute(u"INSERT INTO WIKI VALUES (?, ?)", (wn, str(list(wiki_names[wn]))))
+# print(u"Entries saved:", len(wiki_names))
+# conn.commit()
+# conn.close()
+
+# --------------------------------------------------------------------------------
