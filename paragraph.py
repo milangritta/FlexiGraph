@@ -8,7 +8,8 @@ import matplotlib.cm as cm
 
 
 nlp = spacy.load(u'en_core_web_lg')
-text = codecs.open("../data/lgl/83", encoding="utf-8").read()
+text = codecs.open("../data/lgl/17", encoding="utf-8").read()
+# text = u"With Kannur district expecting a drought scenario, the Kerala Water Authority (KWA) has stepped up measures to meet water shortage in the district. Water in the areas had to be supplied through tankers. The hearing in Moscow's Tverskoy District Court was held to decide whether Magomedov and his associates should be detained pending trial. The Museum of Ice Cream is opening on Collins Avenue in Miami Beach with plenty to taste and room to play. Her parents were away on pilgrimage in Saudi Arabia, and the girl and her two sisters and brother were watched over by her aunts and uncles who all live in the same house in an impoverished neighborhood of narrow lanes on the outskirts of the city. Guardiola has already won domestic titles with Barcelona and Bayern, but he\'s won the Champions League only with the Catalan club. In Washington, some of the 60 Russian diplomats being expelled from the United States in the poisoned spy dispute have been seen leaving the Russian Embassy in the U.S. capital. The Russian state news agency Tass said the first group of expelled diplomats and their families left the embassy compound on Saturday to fly to Moscow. The U.S. said those expelled were intelligence agents working under diplomatic cover, 48 from the embassy and 12 posted to Russia’s mission to the United Nations. They were given a week to leave the country. "
 graph = nx.Graph()
 
 
@@ -21,14 +22,23 @@ def graph_to_sim_matrix(g, m):
     :return:
     """
     table = [['Similarity Table'] + m.keys()]
+    sims = []
     for e1 in m:
         row = [e1]
+        sim = []
         for e2 in m:
             if nx.has_path(g, m[e1], m[e2]):
-                row.append(float("{0:.2f}".format(nx.shortest_path_length(g, m[e1], m[e2], weight='weight'))))
+                distance = float("{0:.2f}".format(nx.shortest_path_length(g, m[e1], m[e2], weight='weight')))
+                row.append(distance)
+                sim.append((e1, e2, distance))
             else:
                 row.append(numpy.inf)
+                sim.append((e1, e2, numpy.inf))
         table.append(row)
+        sims.append(sim)
+    for sim in sims:
+        print sorted(sim, key=lambda (x, y, z): z)
+    #  -------- PRINT A NICE TABLE ------------
     s = [[unicode(e) for e in row] for row in table]
     lens = [max(map(len, col)) for col in zip(*s)]
     fmt = u'\t'.join('{{:{}}}'.format(x) for x in lens)
